@@ -1,0 +1,97 @@
+---
+title: "Financial Data Mining HW 04"
+author: "Varshini Yanamandra"
+date: "2023-02-19"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(ISLR)
+library(leaps)
+library(glmnet)
+library(stats)
+```
+
+```{r}
+spam <- as_tibble(read.table('spam.txt', header = F))
+dim(spam)
+head(spam, 3)
+```
+
+Information on column 'V58': If the entry in column V58 is 1, it means that the email is considered spam. If it is 0, then the email is not classified to be a spam email.
+
+```{r}
+sum(is.na(spam)) # checking if there are any rows with NA values
+
+dim(filter(spam, V58 == 1)) # checking whether there are 1813 spam emails, as per the dataset information
+```
+
+```{r}
+# splitting the data into training and test datasets - 80% train + 20% test
+test_indices <- as.integer(readLines('test_split.txt'))
+spam$test <- test_indices
+
+spam.tr <- filter(spam, test == 0)[, -59]
+spam.test <- filter(spam, test == 1)[, -59]
+
+# creating X and y matrices
+x <- model.matrix(V58 ~ ., spam[, -59])[, -1] # removing column 59 (test indicator)
+y <- spam$V58
+x.tr <- model.matrix(V58 ~ ., spam.tr)[, -1] 
+y.tr <- spam.tr$V58
+x.test <- model.matrix(V58 ~ ., spam.test)[, -1] 
+y.test <- spam.test$V58
+```
+
+```{r}
+# Ridge Regression
+lambda.grid <- 10^seq(10, -2, length = 100) # getting 100 values of lambda
+ridge.tr <- glmnet(x.tr, y.tr, alpha = 0, lambda = lambda.grid, thresh = 1e-12) # lambda = 0 for ridge regression
+
+# cross-validation
+set.seed(2023)
+cv.out <- cv.glmnet(x.tr, y.tr, alpha = 0) # cross-validation to find the best lambda
+plot(cv.out)
+
+lambda.best = cv.out$lambda.min # getting the best value for lambda
+lambda.best
+
+# prediction using ridge regression
+ridge.preds <- predict(ridge.tr, s = lambda.best, newx = x.test)
+ridge.test_mse = mean((ridge.preds - y.test)^2) # calculating the test MSE
+ridge.test_mse
+
+out <- glmnet(x, y, alpha = 0, lambda = lambda.grid)
+predict(out, type = "coefficients", s = lambda.best) # getting the ridge regression coefficients (beta_hat_ridge)
+```
+
+```{r}
+# LASSO
+lasso.tr <- glmnet(x.tr, y.tr, alpha = 1, lambda = lambda.grid) # alpha = 1 for LASSO
+
+# cross-validation
+set.seed(2023) # using the same seed as used for ridge regression for repetition
+cv.out <- cv.glmnet(x.tr, y.tr, alpha = 1)
+plot(cv.out)
+
+lambda.best = cv.out$lambda.min # getting the best value for lambda
+lambda.best
+
+# prediction using LASSO
+lasso.preds <- predict(lasso.tr, s = lambda.best, newx = x.test)
+lasso.test_mse = mean((lasso.preds - y.test)^2) # calculating the test MSE
+lasso.test_mse
+
+out <- glmnet(x, y, alpha = 1, lambda = lambda.grid)
+lasso.coef <- predict(out, type = "coefficients", s = lambda.best)
+lasso.coef # printing all LASSO coefficients (beta_hat_LASSO)
+```
+
+In the LASSO, we can see that a few coefficients are marked by '.' - this means that these variables have been eliminated by making their coefficients 0. This illustrates the variable selection property of LASSO.

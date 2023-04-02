@@ -1,0 +1,53 @@
+---
+title: "Financial Data Mining HW 5"
+author: "Varshini Yanamandra"
+date: "2023-02-26"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Question 3
+
+```{r}
+# Loading required packages and libraries
+library(ISLR)
+library(MASS)
+library(glmnet)
+```
+
+```{r}
+head(Smarket) # quick look at the dataset
+```
+
+```{r}
+set.seed(7)
+N = 1000
+beta1.ls_lr <- rep(0, N) # initializing the bootstrap values for logistic regression
+beta1.ls_lda <- rep(0, N) # initializing the bootstrap values for LDA
+
+for (i in 1:N) {
+  smarket <- Smarket[sample(nrow(Smarket), replace = T), ]
+  # we need to use $coef[1] to get the coefficient of beta_hat_1 for logistic regression
+  # and $scaling[1] for LDA
+  beta1.ls_lr[i] <- glm(Direction ~ Lag1 + Lag2 + Volume, data = smarket, family = binomial)$coef[1]
+  beta1.ls_lda[i] <- lda(Direction ~ Lag1 + Lag2 + Volume ,data = smarket)$scaling[1]
+}
+```
+
+```{r}
+# Logistic Regression
+sd(beta1.ls_lr) # standard error
+quantile(beta1.ls_lr, c(0.025,0.975)) # 95% confidence interval
+```
+
+```{r}
+# Linear Discriminant Analysis
+sd(beta1.ls_lda) # standard error
+quantile(beta1.ls_lda, c(0.025,0.975)) # 95% confidence interval
+```
+

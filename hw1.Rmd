@@ -1,0 +1,42 @@
+---
+title: "STAT 588 HW 01"
+author: "Varshini Yanamandra"
+date: "2023-01-30"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+ESL exercise 3.2:
+```{r}
+x <- rnorm(500, mean = 0, sd = 1) # generating 500 values of x randomly - here, I am generating them from a standard normal distribution
+
+x1 <- x
+x2 <- x*x
+x3 <- x*x*x
+e <- rnorm(500) # generating noise from the standard normal distribution
+y = 7.29374 + 0.73629*x1 + 3.29347*x2 + 8.32487*x3 + e
+
+df <- data.frame(y, x1, x2, x3) # creating a dataframe with all of the values
+head(df, 3) # checking the first 3 rows of the dataframe
+
+y.lm <- lm(y ~ x1 + x2 + x3, data = df) # linear regression model
+
+u <- rnorm(15, mean = 0, sd = 1) # new data for prediction
+
+ci <- predict(y.lm, newdata = data.frame(x1 = u, x2 = u*u, x3 = u*u*u), interval = "confidence") # point-wise 95% C.I.
+pi <- confint(y.lm) # 95% C.I. for beta-hat
+
+lower <- pi["(Intercept)", 1] + u*pi["x1", 1] + u*u*pi["x2", 1] + u*u*u*pi["x3", 1]
+upper <- lower <- pi["(Intercept)", 2] + u*pi["x1", 2] + u*u*pi["x2", 2] + u*u*u*pi["x3", 2]
+
+plot(ci[,1], col = "black", type = "o", xlab = "X", ylab = "Y")
+lines(ci[,2], col = "blue")
+lines(ci[,3], col = "blue")
+lines(lower, col = "red")
+lines(upper, col = "red")
+```

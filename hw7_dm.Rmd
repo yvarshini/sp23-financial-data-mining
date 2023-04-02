@@ -1,0 +1,62 @@
+---
+title: "Financial Data Mining HW 07"
+author: "Varshini Yanamandra"
+date: "2023-03-17"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+# libraries
+library(tidyverse)
+library(MASS)
+library(splines)
+```
+
+ESL Exercise 5.5
+
+```{r}
+# loading the data
+phenome_raw <- read.table('phenome.txt', sep = ",", header = T)
+dim(phenome_raw) # checking the dimension of the df 
+# dimension should be 4509 * (1 + 256 + 2) = 4509 * 259
+
+# the response variable is named "g"
+# removing unnecessary columns "row.name" and "speaker"
+phenome <- phenome_raw[, c(-1, -259)]
+X <- phenome[, -257]
+```
+
+I will specify 'df' to the ns() function - this means that the knots will be spaced uniformly (in quantiles).
+Degrees of freedom used: 7, 10, 24, 50, 100
+
+```{r}
+# QDA
+# filter correlated features by using a smooth basis of natural cubic splines
+# generating basis matrix for natural cubic splines
+# using 10-fold cross-validation
+
+df <- c(7, 10, 24, 50, 100)
+ns.error = rep(0, 5)
+
+for (i in 1:5) {
+  basis.mat <- ns(1:256, df = df[i]) # creating a basis matrix
+  g = phenome[, 257]
+  phenome_new = cbind(as.data.frame(as.matrix(phenome[, -257]) %*% basis.mat), g)
+  folds = sample(1:10, nrow(phenome_new), replace = T) # 10-fold cross-validation
+  cv.error = rep(0, 10)
+  
+  for (j in 1:10) {
+    model.fit <- qda(g ~ ., data = phenome_new[folds != j, ])
+    model.preds <- predict(model.fit, newdata = phenome_new[folds == j, ])
+    cv.error[j] = mean(model.preds$class != phenome_new[folds == j, ]$g)
+  }
+  
+  ns.error[i] = mean(cv.error)
+}
+which.min(ns.error) # 3
+ns.error[3]
+```
+
+We select df = 24 since it gives the minimum error by cross-validation.

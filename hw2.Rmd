@@ -1,0 +1,104 @@
+---
+title: "Financial Data Mining HW 02"
+author: "Varshini Yanamandra"
+date: "2023-02-03"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(class)
+```
+
+Question 1 - ESL Ex. 2.8
+
+```{r}
+# reading the training dataset
+train_data <- read.table('zip.train')
+train_data <- as_tibble(train_data)
+head(train_data, 3)
+
+train_data <- filter(train_data, V1 == 2 | V1 == 3)
+head(train_data, 3)
+
+# reading the test dataset
+test_data <- read.table('zip.test')
+test_data <- as_tibble(filter(test_data, V1 == 2 | V1 ==3))
+head(test_data, 3)
+```
+
+```{r}
+# Linear Regression
+lm_model <- lm(V1 ~ ., data = train_data)
+lm_model_sum <- summary(lm_model)
+
+# predictions on training data based on lm_model
+lm_preds_train <- predict(lm_model, train_data)
+lm_preds_train <- as.data.frame(lm_preds_train)
+lm_preds_train$lm_preds_train <- round(lm_preds_train$lm_preds_train) # rounding the prediction
+head(lm_preds_train, 3)
+
+trerr <- mean((train_data$V1 - lm_preds_train$lm_preds_train)^2) # calculating the MSE on the training data
+
+# predictions on test data based on lm_model
+lm_preds <- predict(lm_model, test_data)
+lm_preds <- as.data.frame(lm_preds)
+lm_preds$lm_preds <- round(lm_preds$lm_preds) # rounding the predictions
+head(lm_preds, 3) # final predictions
+
+testerr <- mean((test_data$V1 - lm_preds$lm_preds)^2) # calculating the MSE on the test data
+
+# creating a summary table
+lr_summ <- tibble(r_sqaured = lm_model_sum$r.squared, adj_r_squared = lm_model_sum$adj.r.squared, train_mse = trerr, test_mse = testerr)
+lr_summ
+```
+
+```{r}
+# k - nearest neighbors
+# use k = 1, 3, 5, 7 and 15
+
+# k = 1
+knn_model_1 <- knn(train_data, train_data, k = 1, cl <- train_data$V1)
+trerr.1 <- mean(knn_model_1 != train_data$V1)
+knn_model_1 <- knn(train_data, test_data, k = 1, cl <- train_data$V1)
+testerr.1 <- mean(knn_model_1 != test_data$V1)
+
+# k = 3
+knn_model_3 <- knn(train_data, train_data, k = 3, cl <- train_data$V1)
+trerr.3 <- mean(knn_model_3 != train_data$V1)
+knn_model_3 <- knn(train_data, test_data, k = 3, cl <- train_data$V1)
+testerr.3 <- mean(knn_model_3 != test_data$V1)
+
+# k = 5
+knn_model_5 <- knn(train_data, train_data, k = 5, cl <- train_data$V1)
+trerr.5 <- mean(knn_model_5 != train_data$V1)
+knn_model_5 <- knn(train_data, test_data, k = 5, cl <- train_data$V1)
+testerr.5 <- mean(knn_model_5 != test_data$V1)
+
+# k = 7
+knn_model_7 <- knn(train_data, train_data, k = 7, cl <- train_data$V1)
+trerr.7 <- mean(knn_model_7 != train_data$V1)
+knn_model_7 <- knn(train_data, test_data, k = 7, cl <- train_data$V1)
+testerr.7 <- mean(knn_model_7 != test_data$V1)
+
+# k = 15
+knn_model_15 <- knn(train_data, train_data, k = 15, cl <- train_data$V1)
+trerr.15 <- mean(knn_model_15 != train_data$V1)
+knn_model_15 <- knn(train_data, test_data, k = 15, cl <- train_data$V1)
+testerr.15 <- mean(knn_model_15 != test_data$V1)
+
+# creating a summary table
+k <- c(1, 3, 5, 7, 15)
+train_error <- c(trerr.1, trerr.3, trerr.5, trerr.7, trerr.15)
+test_error <- c(testerr.1, testerr.3, testerr.5, testerr.7, testerr.15)
+knn_summ <- tibble(k, train_error, test_error)
+knn_summ
+```
+
+Seeing both the training and test errors, we can conclude that the KNN model is better-suited for this problem compared to linear regression. In KNN, the best model is obtained by using k = 1 from among the choices given, as this gives us the least training and test errors.

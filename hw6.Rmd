@@ -1,0 +1,105 @@
+---
+title: "Financial Data Mining HW 06"
+author: "Varshini Yanamandra"
+date: "2023-03-04"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Question 2
+
+```{r}
+library(tidyverse)
+library(glmnet) # for logistic regression
+library(MASS) # for LDA and QDA
+library(e1071) # for SVM
+```
+
+```{r}
+# data preparation
+spam <- read.table("spam.txt", header = F)
+
+# Information on column 'V58': If the entry in column V58 is 1, 
+# it means that the email is considered spam. 
+# If it is 0, then the email is not classified to be a spam email.
+
+# checking if there are any rows with NA values
+sum(is.na(spam)) 
+# checking whether there are 1813 spam emails,
+# as per the dataset information
+dim(filter(spam, V58 == 1))[1] 
+```
+
+```{r}
+# splitting the data into training and test datasets 
+# as per the split given on the ESL website
+test_indices <- as.integer(readLines('test_split.txt'))
+spam$test <- test_indices
+
+spam.tr <- filter(spam, test == 0)[, -59] # training data
+spam.test <- filter(spam, test == 1)[, -59] # test data
+```
+
+```{r}
+# logistic regression
+
+# fitting the logistic regression model on the training data
+lr.fit <- glm(V58 ~ ., data = spam.tr, family = binomial)
+
+# prediction on the test data using lr.fit
+lr.probs <- predict(lr.fit, spam.test, type = "response")
+# initializing the prediction values
+lr.preds = rep(0, length(lr.probs)) 
+# if the predicted probability is > 0.5, classify it as spam
+lr.preds[lr.probs > 0.5] = 1 
+# computing the test misclassification error
+mean(lr.preds != spam.test$V58) 
+```
+
+```{r}
+# SVM
+set.seed(7) # for reproducibility of randomness
+
+# fitting an SVM model on the training data
+svm.fit <- svm(V58 ~ ., data = spam.tr, kernel = "radial", cost = 1, gamma = 1)
+
+# prediction on the test data using svm.fit
+svm.probs <- predict(svm.fit, spam.test)
+svm.preds = rep(0, length(spam.test$V58))
+svm.preds[svm.preds > 0.5] = 1
+
+mean(svm.preds != spam.test$V58)
+```
+
+```{r}
+# LDA
+
+# fitting the LDA model on the training data
+lda.fit <- lda(V58 ~ ., data = spam.tr)
+
+# prediction on the test data using lda.fit
+lda.probs <- predict(lda.fit, spam.test)
+# computing the test misclassification error
+mean(lda.probs$class != spam.test$V58)
+```
+
+```{r}
+# QDA
+
+# fitting the QDA model on the training data
+qda.fit <- qda(V58 ~ ., data = spam.tr)
+
+# prediction on the test data using qda.fit
+qda.probs <- predict(qda.fit, spam.test)
+# computing the test misclassification error
+mean(qda.probs$class != spam.test$V58) 
+```
+
+
+
+

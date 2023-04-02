@@ -1,0 +1,434 @@
+---
+title: "Data Mining HW 03"
+author: "Varshini Yanamandra"
+date: "2023-02-09"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(ISLR)
+library(glmnet)
+library(leaps)
+library(boot)
+```
+
+ESL Ex. 7.9
+
+```{r}
+prostate <- as_tibble(read.table("prostate.txt"), headers = T) # loading the data as a tibble
+head(prostate, 3)
+
+# scaling the features
+prostate[, c(11:18)] <- scale(prostate[, c(1:8)], T, T)
+colnames(prostate) <- c("lcavol", "lweight", "age", "lbph", "svi", "lcp", "gleason", "pgg45", "lpsa", "train", "scaled.lcavol", "scaled.lweight", "scaled.age", "scaled.lbph", "scaled.svi", "scaled.lcp", "scaled.gleason", "scaled.pgg45")
+prostate.new <- prostate[, c(9:18)]
+colnames(prostate.new) <- c("lpsa", "train", "lcavol", "lweight", "age", "lbph", "svi", "lcp", "gleason", "pgg45")
+
+# splitting the data into training and test data
+train_data <- filter(prostate.new, train == TRUE)
+test_data <- filter(prostate.new, train != TRUE)
+train_data <- subset(train_data, select = -c(2)) # removing the 'train' column since the data has been split
+test_data <- subset(test_data, select = -c(2))
+colnames(train_data) <- c("lpsa", "lcavol", "lweight", "age", "lbph", "svi", "lcp", "gleason", "pgg45")
+colnames(test_data) <- c("lpsa", "lcavol", "lweight", "age", "lbph", "svi", "lcp", "gleason", "pgg45")
+head(train_data, 3)
+head(test_data, 3)
+```
+
+```{r}
+# choosing among models based on which model minimizes the test MSE
+set.seed(1)
+
+prostatefit.best <- regsubsets(lpsa ~ ., train_data)
+test.mat <- model.matrix(lpsa ~ ., test_data) # fitting the test dataset to the model
+val.errors = rep(NA, 8)
+for (i in 1:8) {
+  coeff = coef(prostatefit.best, id = i)
+  pred = test.mat[, names(coeff)] %*% coeff
+  val.errors[i] = mean((test_data$lpsa - pred)^2) # calculating the r-squared for the predictions on the test dataset
+}
+
+val.errors
+which.min(val.errors) # output is 3
+coef(prostatefit.best, 3)
+```
+
+From this, we can see that the model with k = 3 (lcavol, lweight and svi) minimizes the test MSE, hence it is chosen as the best subset.
+
+```{r}
+summ <- data.frame(c("AIC", "BIC", "5-fold CV error", "10-fold CV error"), c(0, 0, 0, 0), c(0, 0, 0, 0))
+colnames(summ) <- c("criterion", "full_model", "test_data_fit")
+
+## FULL DATASET
+best.fit.full <- lm(lpsa ~ lcavol + lweight + svi, rbind(train_data, test_data)) # fitting the best model to the whole dataset
+
+aic = AIC(best.fit.full) # computing AIC of the best model
+bic = BIC(best.fit.full) # computing BIC of the best model
+
+glm.fit <- glm(lpsa ~ lcavol + lweight + svi, data = rbind(train_data, test_data))
+cv.error.5 = cv.glm(rbind(train_data, test_data), glm.fit, K = 5)$delta[1] # 5-fold cross-validation estimate of prediction error
+
+cv.error.10 = cv.glm(rbind(train_data, test_data), glm.fit, K = 10)$delta[1] # 10-fold cross-validation estimate of prediction error
+
+summ$full_model <- c(aic, bic, cv.error.5, cv.error.10)
+
+## TEST DATASET ONLY
+best.fit.test <- lm(lpsa ~ lcavol + lweight + svi, test_data) # fitting the best model to the test dataset
+
+aic = AIC(best.fit.test) # computing AIC of the best model
+bic = BIC(best.fit.test) # computing BIC of the best model
+
+glm.fit <- glm(lpsa ~ lcavol + lweight + svi, data = test_data)
+cv.error.5 = cv.glm(test_data, glm.fit, K = 5)$delta[1] # 5-fold cross-validation estimate of prediction error
+
+cv.error.10 = cv.glm(test_data, glm.fit, K = 10)$delta[1] # 10-fold cross-validation estimate of prediction error
+
+summ$test_data_fit <- c(aic, bic, cv.error.5, cv.error.10)
+
+summ # printing the summary table for the best subset model
+```
+
+Further analysis: in this section, a deeper analysis of the data and subsets has been presented. For the cross-validation part, 2 methods have been presented (that were discussed in class) that do not make use of the cv.glm() method; however, these methods' outputs vary vastly with the selection of the random seed.
+
+```{r}
+## best-subset linear regression analysis
+# checking for na values
+sum(is.na(prostate$lpsa)) # there are no null values
+
+prostatefit.full <- regsubsets(lpsa ~ ., prostate.new[, -c(2)])
+prostatefit.summ <- summary(prostatefit.full)
+prostatefit.summ$which
+
+# plotting the r-squared values
+plot(prostatefit.summ$rss, xlab = "Number of Variables", ylab = "RSq", type = "l")
+
+# plotting the adjusted r-squared values
+plot(prostatefit.summ$adjr2, xlab = "Number of Variables", ylab = "Adjusted RSq", type = "l")
+# getting the point for which adjusted r-squared is maximum - "best model"
+which.max(prostatefit.summ$adjr2) # output is 7
+plot.new = T
+points(7, prostatefit.summ$adjr2[7], col = "red", cex = 2, pch = 20) # marking the "best model"
+
+# plotting the Cp values; same as AIC
+plot(prostatefit.summ$cp, xlab = "Number of Variables", ylab = "Cp", type = "l")
+which.min(prostatefit.summ$cp) # output is 5
+points(5, prostatefit.summ$cp[5], col = "red", cex = 2, pch = 20)
+
+# plotting the BIC values
+plot(prostatefit.summ$bic, xlab = "Number of Variables", ylab = "BIC", type = "l")
+which.min(prostatefit.summ$bic) # output is 3
+points(3, prostatefit.summ$bic[3], col = "red", cex = 2, pch = 20)
+
+plot(prostatefit.full, scale = "r2")
+plot(prostatefit.full, scale = "adjr2")
+plot(prostatefit.full, scale = "Cp")
+plot(prostatefit.full, scale = "bic")
+
+coef(prostatefit.full, 3)
+```
+
+```{r}
+# choosing among models
+set.seed(1)
+
+prostatefit.best <- regsubsets(lpsa ~ ., train_data)
+test.mat <- model.matrix(lpsa ~ ., test_data) # fitting the test dataset to the model
+val.errors = rep(NA, 8)
+for (i in 1:8) {
+  coeff = coef(prostatefit.best, id = i)
+  pred = test.mat[, names(coeff)] %*% coeff
+  val.errors[i] = mean((test_data$lpsa - pred)^2) # calculating the r-squared for the predictions on the test dataset
+}
+
+val.errors
+which.min(val.errors) # output is 3
+coef(prostatefit.best, 3)
+
+predict.regsubsets = function(object, newdata, id, ...) {
+  form = as.formula(object$call[[2]])
+  mat = model.matrix(form, newdata)
+  coeff = coef(object, id = id)
+  xvars = names(coeff)
+  mat[, xvars] %*% coeff
+}
+
+prostatefit.best <- regsubsets(lpsa ~ ., prostate.new[, -c(2)])
+coef(prostatefit.best, 3)
+```
+
+```{r}
+## 5-fold cross-validation
+# method 1
+k = 5
+set.seed(91)
+folds <- sample(1:k, nrow(prostate.new), replace = T)
+cv.errors <- matrix(NA, k, 8, dimnames = list(NULL, paste(1:8)))
+
+for (i in 1:k) {
+  best.fit <- regsubsets(lpsa ~ ., prostate.new[folds != i, -2])
+  for (j in 1:8) {
+    pred <- predict(best.fit, prostate.new[folds == i, -2], id = j)
+    cv.errors[i, j] = mean((prostate.new$lpsa[folds == i] - pred)^2)
+  }
+}
+
+mean.cv.errors <- apply(cv.errors, 2, mean)
+mean.cv.errors
+
+plot(mean.cv.errors, type = 'b')
+which.min(mean.cv.errors) # output is 8
+points(8, mean.cv.errors[8], col = "red", cex = 2, pch = 20)
+
+reg.best <- regsubsets(lpsa ~ ., prostate.new[, -2])
+coef(reg.best, 8)
+
+# method 2
+k = 5
+set.seed(91)
+
+folds <- sample(1:k, nrow(prostate.new), replace = T)
+cv.errors <- matrix(NA, k, 8, dimnames = list(NULL, paste(1:8)))
+
+x = model.matrix(lpsa ~ ., data = prostate.new[, -2])[, -1]
+y = prostate.new$lpsa
+
+best.fit <- regsubsets(lpsa ~ ., prostate.new[, -2])
+fit_all_sum <- summary(best.fit)
+
+for (i in 1:8) {
+  subset_k <- fit_all_sum$which[i, -1]
+  subset_k <- c(names(subset_k)[subset_k])
+  newdata_k <- data.frame(lpsa = y, x[, subset_k])
+  for (j in 1:k) {
+    lm.fit <- lm(lpsa ~ ., newdata_k[folds != j, ])
+    pred <- predict(lm.fit, newdata_k[folds == j, ])
+    cv.errors[j, i] = mean((prostate.new$lpsa[folds == j] - pred)^2)
+  }
+}
+
+mean.cv.errors = apply(cv.errors, 2, mean)
+mean.cv.errors
+
+plot(mean.cv.errors, type = 'b')
+which.min(mean.cv.errors) # output is 7
+points(7, mean.cv.errors[7], col = "red", cex = 2, pch = 20)
+
+reg.best <- regsubsets(lpsa ~ ., prostate.new[, -2])
+coef(reg.best, 7)
+
+# method 3
+set.seed(91)
+glm.fit <- glm(lpsa ~ ., data = prostate.new[, -2])
+cv.error.5 <- cv.glm(prostate.new[, -2], glm.fit, K = 5)
+cv.error.5$delta[1]
+```
+
+```{r}
+# trying with a different seed
+# method 1
+k = 5
+set.seed(100)
+folds <- sample(1:k, nrow(prostate.new), replace = T)
+cv.errors <- matrix(NA, k, 8, dimnames = list(NULL, paste(1:8)))
+
+for (i in 1:k) {
+  best.fit <- regsubsets(lpsa ~ ., prostate.new[folds != i, -2])
+  for (j in 1:8) {
+    pred <- predict(best.fit, prostate.new[folds == i, -2], id = j)
+    cv.errors[i, j] = mean((prostate.new$lpsa[folds == i] - pred)^2)
+  }
+}
+
+mean.cv.errors <- apply(cv.errors, 2, mean)
+mean.cv.errors
+
+plot(mean.cv.errors, type = 'b')
+which.min(mean.cv.errors) # output is 3
+points(3, mean.cv.errors[3], col = "red", cex = 2, pch = 20)
+
+reg.best <- regsubsets(lpsa ~ ., prostate.new[, -2])
+coef(reg.best, 3)
+
+# method 2
+k = 5
+set.seed(100)
+
+folds <- sample(1:k, nrow(prostate.new), replace = T)
+cv.errors <- matrix(NA, k, 8, dimnames = list(NULL, paste(1:8)))
+
+x = model.matrix(lpsa ~ ., data = prostate.new[, -2])[, -1]
+y = prostate.new$lpsa
+
+best.fit <- regsubsets(lpsa ~ ., prostate.new[, -2])
+fit_all_sum <- summary(best.fit)
+
+for (i in 1:8) {
+  subset_k <- fit_all_sum$which[i, -1]
+  subset_k <- c(names(subset_k)[subset_k])
+  newdata_k <- data.frame(lpsa = y, x[, subset_k])
+  for (j in 1:k) {
+    lm.fit <- lm(lpsa ~ ., newdata_k[folds != j, ])
+    pred <- predict(lm.fit, newdata_k[folds == j, ])
+    cv.errors[j, i] = mean((prostate.new$lpsa[folds == j] - pred)^2)
+  }
+}
+
+mean.cv.errors = apply(cv.errors, 2, mean)
+mean.cv.errors
+
+plot(mean.cv.errors, type = 'b')
+which.min(mean.cv.errors) # output is 3
+points(3, mean.cv.errors[3], col = "red", cex = 2, pch = 20)
+
+reg.best <- regsubsets(lpsa ~ ., prostate.new[, -2])
+coef(reg.best, 3)
+
+# method 3
+set.seed(100)
+glm.fit <- glm(lpsa ~ ., data = prostate.new[, -2])
+cv.error.5 <- cv.glm(prostate.new[, -2], glm.fit, K = 5)
+cv.error.5$delta[1]
+```
+
+
+```{r}
+## 10-fold cross-validation
+# method 1
+k = 10
+set.seed(173)
+folds <- sample(1:k, nrow(prostate.new), replace = T)
+cv.errors <- matrix(NA, k, 8, dimnames = list(NULL, paste(1:8)))
+
+for (i in 1:k) {
+  best.fit <- regsubsets(lpsa ~ ., prostate.new[folds != i, -2])
+  for (j in 1:8) {
+    pred <- predict(best.fit, prostate.new[folds == i, -2], id = j)
+    cv.errors[i, j] = mean((prostate.new$lpsa[folds == i] - pred)^2)
+  }
+}
+
+mean.cv.errors <- apply(cv.errors, 2, mean)
+mean.cv.errors
+
+plot(mean.cv.errors, type = 'b')
+which.min(mean.cv.errors) # output is 3
+points(3, mean.cv.errors[3], col = "red", cex = 2, pch = 20)
+
+reg.best <- regsubsets(lpsa ~ ., prostate.new[, -2])
+coef(reg.best, 3)
+
+# method 2
+k = 10
+set.seed(173)
+
+folds <- sample(1:k, nrow(prostate.new), replace = T)
+cv.errors <- matrix(NA, k, 8, dimnames = list(NULL, paste(1:8)))
+
+x = model.matrix(lpsa ~ ., data = prostate.new[, -2])[, -1]
+y = prostate.new$lpsa
+
+best.fit <- regsubsets(lpsa ~ ., prostate.new[, -2])
+fit_all_sum <- summary(best.fit)
+
+for (i in 1:8) {
+  subset_k <- fit_all_sum$which[i, -1]
+  subset_k <- c(names(subset_k)[subset_k])
+  newdata_k <- data.frame(lpsa = y, x[, subset_k])
+  for (j in 1:k) {
+    lm.fit <- lm(lpsa ~ ., newdata_k[folds != j, ])
+    pred <- predict(lm.fit, newdata_k[folds == j, ])
+    cv.errors[j, i] = mean((prostate.new$lpsa[folds == j] - pred)^2)
+  }
+}
+
+mean.cv.errors = apply(cv.errors, 2, mean)
+mean.cv.errors
+
+plot(mean.cv.errors, type = 'b')
+which.min(mean.cv.errors) # output is 4
+points(4, mean.cv.errors[4], col = "red", cex = 2, pch = 20)
+
+reg.best <- regsubsets(lpsa ~ ., prostate.new[, -2])
+coef(reg.best, 4)
+
+# method 3
+set.seed(173)
+glm.fit <- glm(lpsa ~ ., data = prostate.new[, -2])
+cv.error.10 <- cv.glm(prostate.new[, -2], glm.fit, K = 10)
+cv.error.10$delta[1]
+```
+
+```{r}
+# trying with a different seed
+# method 1
+k = 10
+set.seed(58)
+folds <- sample(1:k, nrow(prostate.new), replace = T)
+cv.errors <- matrix(NA, k, 8, dimnames = list(NULL, paste(1:8)))
+
+for (i in 1:k) {
+  best.fit <- regsubsets(lpsa ~ ., prostate.new[folds != i, -2])
+  for (j in 1:8) {
+    pred <- predict(best.fit, prostate.new[folds == i, -2], id = j)
+    cv.errors[i, j] = mean((prostate.new$lpsa[folds == i] - pred)^2)
+  }
+}
+
+mean.cv.errors <- apply(cv.errors, 2, mean)
+mean.cv.errors
+
+plot(mean.cv.errors, type = 'b')
+which.min(mean.cv.errors) # output is 7
+points(7, mean.cv.errors[7], col = "red", cex = 2, pch = 20)
+
+reg.best <- regsubsets(lpsa ~ ., prostate.new[, -2])
+coef(reg.best, 7)
+
+# method 2
+k = 10
+set.seed(58)
+
+folds <- sample(1:k, nrow(prostate.new), replace = T)
+cv.errors <- matrix(NA, k, 8, dimnames = list(NULL, paste(1:8)))
+
+x = model.matrix(lpsa ~ ., data = prostate.new[, -2])[, -1]
+y = prostate.new$lpsa
+
+best.fit <- regsubsets(lpsa ~ ., prostate.new[, -2])
+fit_all_sum <- summary(best.fit)
+
+for (i in 1:8) {
+  subset_k <- fit_all_sum$which[i, -1]
+  subset_k <- c(names(subset_k)[subset_k])
+  newdata_k <- data.frame(lpsa = y, x[, subset_k])
+  for (j in 1:k) {
+    lm.fit <- lm(lpsa ~ ., newdata_k[folds != j, ])
+    pred <- predict(lm.fit, newdata_k[folds == j, ])
+    cv.errors[j, i] = mean((prostate.new$lpsa[folds == j] - pred)^2)
+  }
+}
+
+mean.cv.errors = apply(cv.errors, 2, mean)
+plot(mean.cv.errors, type = 'b')
+which.min(mean.cv.errors) # output is 3
+points(3, mean.cv.errors[3], col = "red", cex = 2, pch = 20)
+
+reg.best <- regsubsets(lpsa ~ ., prostate.new[, -2])
+coef(reg.best, 3)
+
+# method 3
+set.seed(58)
+glm.fit <- glm(lpsa ~ ., data = prostate.new[, -2])
+cv.error.10 <- cv.glm(prostate.new[, -2], glm.fit, K = 10)
+cv.error.10$delta[1]
+```
+
+As per the AIC (Cp) criterion, the model with 5 regressors (lcavol, lweight, age, lbph and svi) is the best-fit. However, as per the BIC criterion, the model with 3 regressors (lcavol, lweight and svi) is the best-fit model.
+The output of the k-fold cross-validation methods vary (quite a lot) with the seed.
