@@ -1,0 +1,88 @@
+---
+title: "Financial Data Mining HW 08"
+author: "Varshini Yanamandra"
+date: "2023-03-28"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Following Lecture_9 Code.R, apply the classification tree approach to the spam data.
+
+```{r}
+# required libraries
+library(ISLR)
+library(tree)
+library(tidyverse)
+```
+
+```{r}
+# loading the spam data
+spam = read.table('spam.txt', header = F)
+
+# Information on column 'V58': If the entry in column V58 is 1, 
+# it means that the email is considered spam. 
+# If it is 0, then the email is not classified to be a spam email.
+
+# checking if there are any rows with NA values
+sum(is.na(spam)) 
+# checking whether there are 1813 spam emails,
+# as per the dataset information
+dim(filter(spam, V58 == 1))[1] 
+
+# converting column 'V58' into factors, 
+# since we need to fit a classification tree
+spam$V58 <- as.factor(spam$V58)
+
+# splitting the data into training and test datasets 
+# as per the split given on the ESL website
+test_indices <- as.integer(readLines('test_split.txt'))
+spam$test <- test_indices
+# column 59 contains the test indices
+spam.tr <- filter(spam, test == 0)[, -59] # training data
+spam.test <- filter(spam, test == 1)[, -59] # test data
+```
+
+```{r}
+# fitting a classification tree to the training data
+tree_spam.tr <- tree(V58 ~ ., data = spam.tr)
+plot(tree_spam.tr)
+text(tree_spam.tr, pretty = 0, cex = 0.7, col = "red")
+summary(tree_spam.tr)
+# prediction on test data using the fitted classification tree
+tree_preds <- predict(tree_spam.tr, spam.test, type = "class")
+table(tree_preds, spam.test$V58)
+# accuracy
+(881 + 501)/(881 + 501 + 94 + 60) # 89.97% accuracy on test data
+```
+
+```{r}
+set.seed(6)
+# pruning
+cvtree_spam <- cv.tree(tree_spam.tr, FUN = prune.misclass)
+cvtree_spam # dev corresponds to the CV error rate
+# some plots
+par(mfrow=c(1,2))
+plot(cvtree_spam$size, cvtree_spam$dev, type = "b")
+plot(cvtree_spam$k, cvtree_spam$dev, type = "b")
+# we can choose size = 9 since it has the lowest CV error rate
+# after the tree with size = 14
+```
+
+```{r}
+# pruning the tree to obtain the final tree
+prune.spam <- prune.misclass(tree_spam.tr, best = 9)
+plot(prune.spam)
+text(prune.spam, pretty = 0, cex = 0.7, col = "red")
+
+# prediction on the final tree using the test data
+tree_preds <- predict(prune.spam, spam.test, type = "class")
+table(tree_preds, spam.test$V58)
+# the accuracy remains unchanged
+(881 + 501)/(881 + 94 + 60 + 501) # 89.97% accuracy
+```
+
