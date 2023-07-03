@@ -1,0 +1,137 @@
+---
+title: "Financial Data Mining HW 10"
+author: "Varshini Yanamandra"
+date: "2023-04-17"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# libraries
+library(tidyverse)
+library(stats)
+```
+
+In this problem, you will perform K-means clustering manually, with K = 2, on a small example with n = 6 observations and p = 2 features.
+
+```{r}
+# creating the dataframe with observations
+data.sample <- tibble(observation = c(1, 2, 3, 4, 5, 6), 
+                      X1 = c(1, 1, 0, 5, 6, 4), X2 = c(4, 3, 4, 1, 2, 0))
+data.sample
+```
+
+(a) Plot the observations.
+
+```{r}
+# plot
+plot(data.sample$X1, data.sample$X2, main = "X1 vs X2")
+```
+
+(b) Randomly assign a cluster label to each observation. You can use the sample() command in R to do this. Report the cluster labels for each observation.
+
+```{r}
+set.seed(1)
+labels <- sample(x = 2, size = 6, replace = T)
+data.sample$cluster_random <- labels
+data.sample
+```
+
+(c) Compute the centroid for each cluster.
+
+```{r}
+c1.centroid <- c(mean(data.sample[labels == 1, 2]$X1), 
+                 mean(data.sample[labels == 1, 3]$X2))
+c2.centroid <- c(mean(data.sample[labels == 2, 2]$X1), 
+                 mean(data.sample[labels == 2, 3]$X2))
+c1.centroid
+c2.centroid
+```
+
+(d) Assign each observation to the centroid to which it is closest, in terms of Euclidean distance. Report the cluster labels for each observation.
+
+```{r}
+# defining a function to compute the distance between two points
+euclid.dist <- function (x1, y1, x2, y2) {
+  sqrt((x2 - x1)^2 + (y2 - y1)^2)
+}
+
+# creating a new column for the assigned clusters
+data.sample$cluster <- rep(0, 6)
+
+# calculating the distance between each point and the 
+# centroid to assign each observation to a cluster
+for (i in 1:6) {
+  d1 = euclid.dist(data.sample[[i, 2]], data.sample[[i, 3]], 
+                   c1.centroid[1], c1.centroid[2])
+  d2 = euclid.dist(data.sample[[i, 2]], data.sample[[i, 3]], 
+                   c2.centroid[1], c2.centroid[2])
+  if (d1 > d2) {
+    data.sample$cluster[i] = 2
+  } else {
+    data.sample$cluster[i] = 1
+  }
+}
+
+# reporting the cluster labels for each observation
+data.sample[, c(1, 5)]
+```
+
+(e) Repeat (c) and (d) until the answers obtained stop changing.
+
+```{r}
+# new labels are the computed clusters in the previous step
+labels_new = data.sample$cluster
+
+while (sum(labels_new != labels) > 0) {
+  # old labels are the computed clusters in the previous step
+  labels = data.sample$cluster
+  
+  # computing new centroids
+  c1.centroid <- c(mean(data.sample[labels == 1, 2]$X1), 
+                   mean(data.sample[labels == 1, 3]$X2))
+  c2.centroid <- c(mean(data.sample[labels == 2, 2]$X1), 
+                   mean(data.sample[labels == 2, 3]$X2))
+  c1.centroid
+  c2.centroid
+
+  # calculating the distance between each point and the 
+  # centroid to assign each observation to a cluster
+  for (i in 1:6) {
+    d1 = euclid.dist(data.sample[[i, 2]], data.sample[[i, 3]], 
+                     c1.centroid[1], c1.centroid[2])
+    d2 = euclid.dist(data.sample[[i, 2]], data.sample[[i, 3]], 
+                     c2.centroid[1], c2.centroid[2])
+   if (d1 > d2) {
+     data.sample$cluster[i] = 2
+   } else {
+      data.sample$cluster[i] = 1
+    }
+  }
+
+  # new labels are the computed clusters in the previous step
+  labels_new = data.sample$cluster
+}
+
+data.sample
+```
+
+(f) In your plot from (a), color the observations according to the cluster labels obtained.
+
+```{r}
+# plot
+plot(c1.centroid[1], c1.centroid[2], col = 'red', pch = 4, 
+     xlim = c(0, 6), ylim = c(0, 6), xlab = "X1", ylab = "X2")
+points(c2.centroid[1], c2.centroid[2], col = 'blue', 
+       pch = 4, xlim = c(0, 6), ylim = c(0, 6))
+points(data.sample[labels_new == 1, ]$X1, data.sample[labels_new == 1, ]$X2, 
+       col = 'red', cex = 2)
+points(data.sample[labels_new == 2, ]$X1, data.sample[labels_new == 2, ]$X2, 
+       col = 'blue', cex = 2)
+```
+

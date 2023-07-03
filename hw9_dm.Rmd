@@ -1,0 +1,164 @@
+---
+title: "Financial Data Mining HW 09"
+author: "Varshini Yanamandra"
+date: "2023-04-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+We now use boosting to predict Salary in the Hitters data set.
+
+```{r}
+# libraries
+library(tidyverse)
+library(ISLR) # for the Hitters dataset
+library(gbm) # for boosting
+library(randomForest) # for bagging
+library(glmnet) # for LASSO and ridge regression
+
+attach(Hitters)
+```
+
+(a) Remove the observations for whom the salary information is unknown, and the log-transform the salaries.
+
+```{r}
+# dropping rows where Salary is 'NA'
+hitters <- Hitters %>% drop_na(Salary)
+# log transforming the Salary column
+hitters$logSalary <- log(hitters$Salary)
+# removing the Salary column
+hitters <- hitters[ , -19]
+names(hitters)
+```
+
+(b) Create a training set consisting of the first 200 observations, and a test set consisting of the remaining observations.
+
+```{r}
+# training indices
+train = 1:200
+
+# checking the dimensions
+dim(hitters)[1] # complete dataset
+dim(hitters[train, ])[1] # training set
+dim(hitters[-train, ])[1] # test set
+```
+
+(c) Perform boosting on the training set with 1,000 trees for a range of values of the shrinkage parameter lambda. Produce a plot with different shrinkage values on the x-axis and the corresponding training set MSE on the y-axis.
+
+```{r}
+suppressWarnings({
+# lambda can range between 0 and 1
+# generating lamdas: (0, 0.01, 0.02, ..., 1)
+l <- seq(from = 0, to = 1, by = 0.01)
+# creating tibbles for the results of the training set and test set
+res <- tibble(lamda = l, training_mse = rep(0, length(l)), test_mse = rep(0, length(l)))
+
+y.tr = hitters[train, ]$logSalary
+y.test = hitters[-train, ]$logSalary
+
+# boosting
+set.seed(6)
+for (i in 1:length(l)) {
+  # training the boosting model using the training data
+  hitters.boost <- gbm(logSalary ~ ., data = hitters[train, ], distribution = "gaussian", 
+                       n.trees = 1000, shrinkage = l[i], verbose = F)
+  tr.mse = mean((hitters.boost$fit - y.tr)^2)
+  res[i, 2] = tr.mse
+  # making predictions on the test data using the boosting model
+  hitters.preds <- predict(hitters.boost, newdata = hitters[-train, ], n.trees = 1000)
+  test.mse = mean((hitters.preds - y.test)^2)
+  res[i, 3] = test.mse
+}
+
+# getting the index at which the training MSE is minimum
+min.index = which.min(res$training_mse)
+# plotting lambda vs. training MSE
+plot(res[, c(1, 2)], type = 'l')
+points(res[min.index, 1], res[min.index, 2], col = 'red')
+# getting the value of lambda for which training MSE is minimum
+# as well as the corresponding training MSE
+res[min.index, c(1, 2)]
+})
+```
+
+(d) Produce a plot with different shrinkage values on the x-axis and the corresponding test set MSE on the y-axis.
+
+```{r}
+# getting the index at which the test MSE is minimum
+min.index = which.min(res$test_mse)
+# plotting lambda vs. test MSE
+plot(res[, c(1, 3)], type = 'l')
+points(res[min.index, 1], res[min.index, 3], col = 'red')
+# getting the value of lambda for which test MSE is minimum
+# as well as the corresponding test MSE
+res[min.index, c(1, 3)]
+```
+
+```{r}
+set.seed(6)
+# best model through boosting uses lambda = 0.11
+hitters.boost <- gbm(logSalary ~ ., data = hitters[train, ], distribution = "gaussian", 
+                       n.trees = 1000, shrinkage = 0.11, verbose = F)
+hitters.preds <- predict(hitters.boost, newdata = hitters[-train, ], n.trees = 1000)
+mean((hitters.preds - y.test)^2)
+```
+
+(e) Compare the test MSE of boosting to the test MSE that results from applying two of the regression approaches seen in Chapters 3 (Simple Linear Regression) and 6 (Ridge and LASSO regression).
+
+```{r}
+set.seed(6)
+# creating a tibble to store the results
+res = tibble(model = c("Simple Linear Regression", "Ridge Regression", "LASSO Regression"), test_MSE = rep(0, 3))
+# simple linear regression
+# training the model using the training data
+hitters.lr <- lm(logSalary ~ ., data = hitters[train, ])
+# making predictions on the test data
+hitters.lr.preds <- predict(hitters.lr, newdata = hitters[-train, ])
+res[1, 2] = mean((hitters.lr.preds - y.test)^2) # test MSE
+
+# ridge regression
+# creating X matrix
+x = model.matrix(logSalary ~ ., hitters)[, -1]
+# training and cross-validation
+grid=10^seq(10,-2,length=100)
+hitters.ridge <- cv.glmnet(x[train, ], y.tr, alpha = 0, lambda = grid)
+# prediction using the best lambda
+hitters.ridge.preds <- predict(hitters.ridge, s = hitters.ridge$lambda.min, newx = x[-train, ])
+res[2, 2] = mean((hitters.ridge.preds - y.test)^2) # test MSE
+
+# lasso regression
+# training and cross-validation
+hitters.lasso <- cv.glmnet(x[train, ], y.tr, alpha = 1, lambda = grid)
+# prediction using the best lambda
+hitters.lasso.preds <- predict(hitters.lasso, s = hitters.lasso$lambda.min, newx = x[-train, ])
+res[3, 2] = mean((hitters.lasso.preds - y.test)^2) # test MSE
+
+res
+```
+
+(f) Which variables appear to be the most important predictors in the boosted model?
+
+```{r}
+summary(hitters.boost)
+```
+
+From the table, we can see that the 5 most important predictors for boosting are CAtBat, CRBI, PutOuts, CWalks and CHits.
+
+(g) Now apply bagging to the training set. What is the test set MSE for this approach?
+
+```{r}
+set.seed(6)
+# bagging
+dim(hitters) # 263 20
+# creating a model using the training data
+hitters.bag <- randomForest(logSalary ~ ., data = hitters, subset = train, 
+                            mtry = 19, importance = T)
+# making predictions on the test dataset
+hitters.bag.preds <- predict(hitters.bag, newdata = hitters[-train, ])
+mean((hitters.bag.preds - y.test)^2) # test MSE
+```
+
+The test MSE for bagging is 0.2321681, which is lower than what we got for boosting.
